@@ -1,0 +1,21 @@
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+env/
+venv/
+.env
+.venv
+env.bak/
+venv.bak/
+
+# Archivos de la aplicación local que no deben subirse
+server.log
+uploads/
+pagos/
+*.pdf
+*.xlsx
+
+# Archivos de prueba que tienes localmente
+test_*.py

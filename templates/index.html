@@ -1,0 +1,466 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+<title>Extracto de Pagos de Impuestos SAT</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet"/>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+:root{
+  --bg:#0f1117;--surface:#1a1d27;--surface2:#22263a;--surface3:#2a2f45;
+  --accent:#3b82f6;--green:#10b981;--warn:#f59e0b;--danger:#ef4444;
+  --text:#e2e8f0;--muted:#94a3b8;--border:#2d3748;
+}
+body{font-family:'Inter',sans-serif;background:var(--bg);color:var(--text);min-height:100vh}
+header{background:linear-gradient(135deg,#0f172a,#1e293b);border-bottom:1px solid var(--border);padding:.9rem 2rem;display:flex;align-items:center;gap:.75rem}
+.logo{width:36px;height:36px;background:linear-gradient(135deg,var(--accent),var(--green));border-radius:9px;display:flex;align-items:center;justify-content:center;font-size:1.1rem}
+header h1{font-size:1.15rem;font-weight:700}
+header p{font-size:.75rem;color:var(--muted)}
+.container{max-width:1500px;margin:0 auto;padding:1.25rem 1.5rem}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:1.25rem;margin-bottom:1.25rem}
+@media(max-width:800px){.grid2{grid-template-columns:1fr}}
+.card{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:1.25rem}
+.card-title{font-size:.8rem;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:.85rem;display:flex;align-items:center;gap:.4rem}
+.dropzone{border:2px dashed var(--border);border-radius:9px;padding:1.5rem;text-align:center;cursor:pointer;transition:.2s;background:var(--surface2)}
+.dropzone:hover,.dropzone.drag{border-color:var(--accent);background:rgba(59,130,246,.07)}
+.dropzone .icon{font-size:2rem;margin-bottom:.5rem}
+.dropzone h3{font-size:.95rem;font-weight:600;margin-bottom:.3rem}
+.dropzone p{font-size:.75rem;color:var(--muted)}
+.dropzone input{display:none}
+.btn{display:inline-flex;align-items:center;gap:.4rem;padding:.5rem 1rem;border-radius:7px;border:none;font-size:.82rem;font-weight:500;cursor:pointer;transition:.15s}
+.btn-primary{background:var(--accent);color:#fff}.btn-primary:hover{background:#2563eb}
+.btn-success{background:var(--green);color:#fff}.btn-success:hover{background:#059669}
+.btn-ghost{background:transparent;border:1px solid var(--border);color:var(--text)}.btn-ghost:hover{background:var(--surface2)}
+.btn:disabled{opacity:.45;cursor:not-allowed}
+.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:.9rem;margin-bottom:1.25rem}
+@media(max-width:700px){.stats{grid-template-columns:repeat(2,1fr)}}
+.stat{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:.9rem}
+.stat-val{font-size:1.6rem;font-weight:700;margin-bottom:.15rem}
+.stat-lbl{font-size:.7rem;color:var(--muted)}
+.actions{display:flex;gap:.6rem;flex-wrap:wrap;align-items:center;margin-bottom:1.1rem}
+.sep{flex:1}
+.pill-group{display:flex;gap:.25rem;background:var(--surface2);border-radius:99px;padding:.18rem}
+.pill{padding:.28rem .8rem;border-radius:99px;font-size:.75rem;cursor:pointer;transition:.15s;color:var(--muted)}
+.pill.active{background:var(--accent);color:#fff;font-weight:600}
+.table-wrap{overflow-x:auto;border-radius:10px;border:1px solid var(--border);max-height:60vh;overflow-y:auto}
+table{width:100%;border-collapse:collapse;font-size:.76rem}
+thead th{position:sticky;top:0;z-index:2;padding:.55rem .7rem;text-align:left;font-weight:600;color:var(--muted);white-space:nowrap;border-bottom:1px solid var(--border);background:var(--surface3)}
+td{padding:.55rem .7rem;border-bottom:1px solid rgba(45,55,72,.35);vertical-align:middle}
+tr:last-child td{border-bottom:none}
+tr:hover td{background:rgba(255,255,255,.025)}
+.badge{display:inline-block;padding:.18rem .55rem;border-radius:99px;font-size:.68rem;font-weight:600}
+.badge.nuevo{background:rgba(16,185,129,.15);color:#10b981}
+.badge.anterior{background:rgba(59,130,246,.15);color:#3b82f6}
+.badge.ambos{background:rgba(245,158,11,.15);color:#f59e0b}
+.num{font-variant-numeric:tabular-nums;text-align:right}
+.del-btn{background:none;border:none;cursor:pointer;color:var(--danger);padding:.18rem .35rem;border-radius:4px;font-size:.85rem}
+.del-btn:hover{background:rgba(239,68,68,.1)}
+.empty{text-align:center;padding:2.5rem;color:var(--muted)}
+.empty .icon{font-size:2.5rem;margin-bottom:.6rem}
+#toast{position:fixed;bottom:1.2rem;right:1.2rem;z-index:999;display:flex;flex-direction:column;gap:.4rem}
+.toast-msg{padding:.7rem 1.1rem;border-radius:9px;font-size:.82rem;font-weight:500;animation:fi .2s ease;box-shadow:0 3px 15px rgba(0,0,0,.4)}
+.toast-msg.success{background:#064e3b;color:#6ee7b7;border:1px solid #059669}
+.toast-msg.error{background:#7f1d1d;color:#fca5a5;border:1px solid #ef4444}
+.toast-msg.info{background:#1e3a5f;color:#93c5fd;border:1px solid #3b82f6}
+@keyframes fi{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
+.spinner{display:inline-block;width:13px;height:13px;border:2px solid rgba(255,255,255,.3);border-top-color:#fff;border-radius:50%;animation:spin .6s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+</style>
+</head>
+<body>
+<header>
+  <div class="logo">🧾</div>
+  <div>
+    <h1>Extracto de Pagos de Impuestos</h1>
+    <p>SAT · Contribuciones Federales · Una fila por comprobante</p>
+  </div>
+</header>
+
+<div class="container">
+  <div class="grid2">
+    <div class="card">
+      <div class="card-title"><span>📄</span> Cargar Comprobantes PDF</div>
+      <div class="dropzone" id="pdf-drop" onclick="document.getElementById('pdf-input').click()">
+        <input type="file" id="pdf-input" multiple accept=".pdf"/>
+        <div class="icon">⬆️</div>
+        <h3>Arrastra los PDFs aquí</h3>
+        <p>O haz clic · Múltiples archivos permitidos</p>
+      </div>
+      <div id="pdf-queue-container" style="margin-top:0.7rem; max-height: 160px; overflow-y: auto; display: none;"></div>
+      <div style="margin-top:.7rem;display:flex;gap:.5rem;align-items:center;flex-wrap:wrap">
+        <button class="btn btn-primary" onclick="uploadPDFs()" id="btn-pdf" disabled>📤 Procesar PDFs</button>
+        <span style="font-size:.75rem;color:var(--muted)" id="pdf-sel"></span>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-title"><span>📊</span> Continuar desde Excel</div>
+      <div class="dropzone" id="xl-drop" onclick="document.getElementById('xl-input').click()">
+        <input type="file" id="xl-input" accept=".xlsx,.xls"/>
+        <div class="icon">📂</div>
+        <h3>Cargar Excel previo</h3>
+        <p>Sube el Excel generado para continuar cargando</p>
+      </div>
+      <div style="margin-top:.7rem;display:flex;gap:.5rem;align-items:center;flex-wrap:wrap">
+        <button class="btn btn-success" onclick="uploadExcel()" id="btn-xl">📥 Importar Excel</button>
+        <span style="font-size:.75rem;color:var(--muted)" id="xl-sel"></span>
+      </div>
+    </div>
+  </div>
+
+  <div class="stats">
+    <div class="stat"><div class="stat-val" id="s-total" style="color:var(--warn)">0</div><div class="stat-lbl">Total PDFs cargados</div></div>
+    <div class="stat"><div class="stat-val" id="s-nuevo" style="color:#10b981">0</div><div class="stat-lbl">Portal Nuevo</div></div>
+    <div class="stat"><div class="stat-val" id="s-ant" style="color:#3b82f6">0</div><div class="stat-lbl">Portal Anterior</div></div>
+    <div class="stat"><div class="stat-val" id="s-monto" style="color:var(--warn);font-size:1rem">$0</div><div class="stat-lbl">Total a Pagar</div></div>
+  </div>
+
+  <div class="actions">
+    <div class="pill-group">
+      <div class="pill active" onclick="setFilter('all',this)">Todos</div>
+      <div class="pill" onclick="setFilter('Nuevo',this)">Portal Nuevo</div>
+      <div class="pill" onclick="setFilter('Anterior',this)">Portal Anterior</div>
+    </div>
+    <div class="sep"></div>
+    <button class="btn btn-ghost" onclick="clearAll()">🗑️ Limpiar</button>
+    <button class="btn btn-success" onclick="exportExcel()" id="btn-exp">⬇️ Exportar Excel</button>
+  </div>
+
+  <div class="card" style="padding:0;overflow:hidden">
+    <div class="table-wrap">
+      <table>
+        <thead id="thead"></thead>
+        <tbody id="tbody"></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+<div id="toast"></div>
+
+<script>
+// ── Config impuestos (misma lista que backend) ──
+const IMP_NUEVO = [
+  "ISR personas morales",
+  "ISR retenciones por salarios",
+  "Impuesto al Valor Agregado. Personas morales. Región Fronteriza",
+  "IVA retenciones"
+];
+const IMP_ANT = [
+  "ISR RETENCIONES POR SERVICIOS PROFESIONALES/RÉGIMEN SIMPLIFICADO DE CONFIANZA",
+  "ISR POR PAGOS POR CUENTA DE TERCEROS O RETENCIONES POR ARRENDAMIENTO DE INMUEBLES",
+  "ISR RETENCIONES POR INTERESES"
+];
+const ALL_IMP = [...IMP_NUEVO, ...IMP_ANT];
+const SUB_KEYS = ["a_cargo","parte_actualizada","recargos","fecha_pago_anterior","monto_pago_anterior","cantidad_a_cargo","cantidad_a_favor","compensaciones","cantidad_a_pagar"];
+const SUB_LABELS = ["A cargo","Parte act.","Recargos","F. pago ant.","Monto ant.","Cant. cargo","Cant. favor","Compensaciones","Cant. pagar"];
+const SUB_NUM = new Set([0,1,2,4,5,6,7,8]);
+
+const HDR_KEYS  = ["archivo", "ruta_archivo", "periodo", "ejercicio", "fecha_presentacion", "tipo_declaracion", "tipo_complementaria", "num_operacion_declaracion", "vencimiento_obligacion"];
+const HDR_LABELS= ["Nombre del archivo", "Ruta del archivo", "Período", "Ejercicio", "Fecha presentación", "Tipo decl.", "Tipo complem.", "No. op. declaración", "Venc. obligación"];
+const TAIL_KEYS = ["importe_total","linea_captura","vigente_hasta","institucion_credito","fecha_pago","no_operacion_pago","llave_pago"];
+const TAIL_LABELS=["Total pagado","Línea captura","Vigente hasta","Banco","Fecha pago","No. op. pago","Llave de pago"];
+const TAIL_NUM  = new Set([0]);
+
+let SID = null, RECS = [], FILTER = 'all', pdfQueue = [];
+
+// ── Init ──
+fetch('/api/session/new',{method:'POST'}).then(r=>r.json()).then(d=>{SID=d.session_id});
+
+// ── Build table headers ──
+function buildHeaders(){
+  const thead = document.getElementById('thead');
+  const nTail = TAIL_KEYS.length;
+  const nHdr  = HDR_KEYS.length;
+  // Row 1
+  let r1 = `<tr><th rowspan="2">#</th><th rowspan="2">RFC</th>`;
+  for(let i=0;i<nHdr;i++) r1 += `<th rowspan="2">${HDR_LABELS[i]}</th>`;
+  for(const imp of ALL_IMP){
+    const cls = IMP_NUEVO.includes(imp) ? '#10b981' : '#3b82f6';
+    const short = imp.length > 30 ? imp.substring(0,28)+'…' : imp;
+    r1 += `<th colspan="${SUB_KEYS.length}" style="background:${cls};color:#fff;text-align:center;font-size:.68rem" title="${imp}">${short}</th>`;
+  }
+  for(let i=0;i<nTail;i++) r1 += `<th rowspan="2">${TAIL_LABELS[i]}</th>`;
+  r1 += '<th rowspan="2"></th></tr>';
+  // Row 2
+  let r2 = '<tr>';
+  for(const imp of ALL_IMP){
+    const bg = IMP_NUEVO.includes(imp) ? '#1a6b3a' : '#1a3a6b';
+    for(const sl of SUB_LABELS){
+      r2 += `<th style="background:${bg};color:#ddd;font-size:.63rem;white-space:nowrap">${sl}</th>`;
+    }
+  }
+  r2 += '</tr>';
+  thead.innerHTML = r1 + r2;
+}
+buildHeaders();
+
+// ── Render table ──
+function fmt(v){
+  if(v===null||v===undefined||v==='') return '';
+  const n=parseFloat(v);
+  if(!isNaN(n)) return '$'+n.toLocaleString('es-MX',{minimumFractionDigits:0,maximumFractionDigits:0});
+  return v;
+}
+function renderTable(){
+  const filtered = FILTER==='all' ? RECS :
+    FILTER==='Nuevo' ? RECS.filter(r=>r.portal&&r.portal.includes('Nuevo')) :
+    RECS.filter(r=>r.portal&&r.portal.includes('Anterior'));
+
+  if(!filtered.length){
+    document.getElementById('tbody').innerHTML=`<tr><td colspan="99"><div class="empty"><div class="icon">📭</div><h3>Sin registros</h3><p>Sube comprobantes PDF o importa un Excel</p></div></td></tr>`;
+    return;
+  }
+  let html='';
+  for(let i=0;i<filtered.length;i++){
+    const rec=filtered[i], gi=RECS.indexOf(rec);
+    html+=`<tr>`;
+    html+=`<td style="color:var(--muted)">${i+1}</td>`;
+    html+=`<td><code style="background:var(--surface2);padding:.1rem .3rem;border-radius:4px;font-size:.7rem">${rec.rfc||'-'}</code></td>`;
+    for(let hi=0;hi<HDR_KEYS.length;hi++){
+      const v=rec[HDR_KEYS[hi]]||'-';
+      if(HDR_KEYS[hi] === 'archivo') {
+          html+=`<td style="font-size:.7rem;max-width:90px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${v}">${v}</td>`;
+      } else {
+          html+=`<td style="font-size:.72rem;white-space:nowrap">${v}</td>`;
+      }
+    }
+    for(const imp of ALL_IMP){
+      for(let si=0;si<SUB_KEYS.length;si++){
+        const v=rec[imp+'|'+SUB_KEYS[si]];
+        const display=SUB_NUM.has(si)?fmt(v):(v||'');
+        const style=SUB_NUM.has(si)?'text-align:right;font-variant-numeric:tabular-nums':'text-align:center';
+        html+=`<td style="${style};font-size:.71rem">${display}</td>`;
+      }
+    }
+    for(let ti=0;ti<TAIL_KEYS.length;ti++){
+      const v=rec[TAIL_KEYS[ti]];
+      const display=TAIL_NUM.has(ti)?fmt(v):(v||'-');
+      const style=TAIL_NUM.has(ti)?'text-align:right;font-weight:600;color:#10b981':'font-size:.71rem';
+      html+=`<td style="${style}">${display}</td>`;
+    }
+    html+=`<td><button class="del-btn" onclick="delRec(${gi})">🗑️</button></td></tr>`;
+  }
+  document.getElementById('tbody').innerHTML=html;
+}
+
+function updateStats(){
+  const t=RECS.length;
+  const n=RECS.filter(r=>r.portal&&r.portal.includes('Nuevo')).length;
+  const a=RECS.filter(r=>r.portal&&r.portal.includes('Anterior')).length;
+  let monto=0;
+  for(const rec of RECS){
+    if(rec.importe_total) monto+=parseFloat(rec.importe_total)||0;
+    else for(const imp of ALL_IMP){
+      const v=rec[imp+'|cantidad_a_pagar'];
+      if(v) monto+=parseFloat(v)||0;
+    }
+  }
+  document.getElementById('s-total').textContent=t;
+  document.getElementById('s-nuevo').textContent=n;
+  document.getElementById('s-ant').textContent=a;
+  document.getElementById('s-monto').textContent='$'+monto.toLocaleString('es-MX',{minimumFractionDigits:0,maximumFractionDigits:0});
+}
+
+function setFilter(f,el){
+  FILTER=f;
+  document.querySelectorAll('.pill').forEach(p=>p.classList.remove('active'));
+  el.classList.add('active');
+  renderTable();
+}
+
+// ── PDF Queue System ──
+function addPDFsToQueue(fileList) {
+  for (let i = 0; i < fileList.length; i++) {
+    const file = fileList[i];
+    if (file.type !== "application/pdf" && !file.name.toLowerCase().endsWith(".pdf")) {
+      toast(`El archivo "${file.name}" no es un PDF`, "error");
+      continue;
+    }
+    // Evitar duplicados exactos en la cola
+    const isDup = pdfQueue.some(f => f.name === file.name && f.size === file.size);
+    if (!isDup) {
+      pdfQueue.push(file);
+    }
+  }
+  renderQueue();
+}
+
+function renderQueue() {
+  const container = document.getElementById('pdf-queue-container');
+  const selText = document.getElementById('pdf-sel');
+  const btnPdf = document.getElementById('btn-pdf');
+  
+  if (pdfQueue.length === 0) {
+    container.style.display = 'none';
+    container.innerHTML = '';
+    selText.textContent = '';
+    btnPdf.disabled = true;
+    return;
+  }
+  
+  container.style.display = 'block';
+  btnPdf.disabled = false;
+  
+  selText.textContent = `${pdfQueue.length} archivo(s) en cola`;
+  
+  let html = `
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.4rem;padding:0 0.1rem;">
+      <span style="font-size:0.75rem;color:var(--muted);font-weight:600">Archivos listos para procesar:</span>
+      <button class="btn btn-ghost" onclick="clearQueue(event)" style="padding:0.15rem 0.4rem;font-size:0.65rem;border-color:rgba(239,68,68,0.3);color:var(--danger)">Vaciar cola</button>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:0.35rem;max-height:130px;overflow-y:auto;padding-right:0.2rem;">
+  `;
+  
+  pdfQueue.forEach((file, index) => {
+    const sizeKB = (file.size / 1024).toFixed(1);
+    html += `
+      <div class="queue-item" style="display:flex;align-items:center;justify-content:space-between;background:var(--surface2);padding:0.35rem 0.5rem;border-radius:6px;border:1px solid var(--border);font-size:0.72rem">
+        <div style="display:flex;align-items:center;gap:0.4rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1">
+          <span style="font-size:0.85rem">📄</span>
+          <span style="font-weight:500;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${file.name}">${file.name}</span>
+          <span style="color:var(--muted);font-size:0.65rem">(${sizeKB} KB)</span>
+        </div>
+        <button class="remove-btn" onclick="removeFromQueue(${index}, event)" style="background:none;border:none;color:var(--danger);cursor:pointer;padding:0.18rem 0.35rem;border-radius:4px;font-size:0.75rem;font-weight:bold" title="Quitar de la cola">✕</button>
+      </div>
+    `;
+  });
+  html += '</div>';
+  container.innerHTML = html;
+}
+
+function removeFromQueue(index, event) {
+  if (event) event.stopPropagation();
+  pdfQueue.splice(index, 1);
+  renderQueue();
+}
+
+function clearQueue(event) {
+  if (event) {
+    event.stopPropagation();
+    event.preventDefault();
+  }
+  pdfQueue = [];
+  renderQueue();
+}
+
+// ── File inputs ──
+document.getElementById('pdf-input').addEventListener('change',(e)=>{
+  if (e.target.files.length > 0) {
+    addPDFsToQueue(e.target.files);
+    e.target.value = '';
+  }
+});
+document.getElementById('xl-input').addEventListener('change',()=>{
+  document.getElementById('xl-sel').textContent=document.getElementById('xl-input').files[0]?.name||'';
+});
+
+function setupDrop(zId,iId){
+  const z=document.getElementById(zId);
+  z.addEventListener('dragover',e=>{e.preventDefault();z.classList.add('drag')});
+  z.addEventListener('dragleave',()=>z.classList.remove('drag'));
+  z.addEventListener('drop',e=>{
+    e.preventDefault();z.classList.remove('drag');
+    if (iId === 'pdf-input') {
+      addPDFsToQueue(e.dataTransfer.files);
+    } else {
+      const inp=document.getElementById(iId);
+      inp.files=e.dataTransfer.files;
+      inp.dispatchEvent(new Event('change'));
+    }
+  });
+}
+setupDrop('pdf-drop','pdf-input');
+setupDrop('xl-drop','xl-input');
+
+// ── Upload PDFs ──
+async function uploadPDFs(){
+  if(!pdfQueue.length) return toast('Agrega al menos un PDF a la cola','error');
+  const btn=document.getElementById('btn-pdf');
+  btn.innerHTML='<span class="spinner"></span> Procesando...'; btn.disabled=true;
+  const fd=new FormData();
+  fd.append('session_id',SID);
+  const filePaths = [];
+  for(const f of pdfQueue) {
+      fd.append('files',f);
+      filePaths.push(f.webkitRelativePath || f.name);
+  }
+  fd.append('file_paths', JSON.stringify(filePaths));
+  try{
+    const d=await (await fetch('/api/upload-pdf',{method:'POST',body:fd})).json();
+    if(d.error) return toast(d.error,'error');
+    d.errors?.forEach(e=>toast(e,'error'));
+    if(d.new_count>0) toast(`✅ ${d.new_count} comprobante(s) cargados`,'success');
+    RECS=(await (await fetch(`/api/session/${SID}`)).json()).records;
+    renderTable(); updateStats();
+    clearQueue();
+  }catch{ toast('Error de conexión','error'); }
+  finally{ btn.innerHTML='📤 Procesar PDFs'; btn.disabled=false; }
+}
+
+// ── Upload Excel ──
+async function uploadExcel(){
+  const file=document.getElementById('xl-input').files[0];
+  if(!file) return toast('Selecciona un Excel','error');
+  const btn=document.getElementById('btn-xl');
+  btn.innerHTML='<span class="spinner"></span> Importando...'; btn.disabled=true;
+  const fd=new FormData();
+  fd.append('session_id',SID); fd.append('file',file);
+  try{
+    const d=await (await fetch('/api/upload-excel',{method:'POST',body:fd})).json();
+    if(d.error) return toast(d.error,'error');
+    toast(`📊 ${d.loaded_count} fila(s) importadas`,'success');
+    RECS=(await (await fetch(`/api/session/${SID}`)).json()).records;
+    renderTable(); updateStats();
+    document.getElementById('xl-input').value='';
+    document.getElementById('xl-sel').textContent='';
+  }catch{ toast('Error de conexión','error'); }
+  finally{ btn.innerHTML='📥 Importar Excel'; btn.disabled=false; }
+}
+
+// ── Delete ──
+async function delRec(idx){
+  const d=await (await fetch('/api/delete-record',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({session_id:SID,index:idx})})).json();
+  RECS=d.records; renderTable(); updateStats(); toast('Eliminado','info');
+}
+
+// ── Clear ──
+async function clearAll(){
+  if(!RECS.length) return;
+  if(!confirm('¿Eliminar todos los registros?')) return;
+  await fetch('/api/clear-session',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({session_id:SID})});
+  RECS=[]; renderTable(); updateStats(); toast('Sesión limpiada','info');
+}
+
+// ── Export ──
+async function exportExcel(){
+  if(!RECS.length) return toast('Sin registros','error');
+  const btn=document.getElementById('btn-exp');
+  btn.innerHTML='<span class="spinner"></span> Generando...'; btn.disabled=true;
+  try{
+    const r=await fetch('/api/export-excel',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({session_id:SID})});
+    if(!r.ok){toast((await r.json()).error,'error');return;}
+    const blob=await r.blob();
+    const a=document.createElement('a');
+    a.href=URL.createObjectURL(blob);
+    const cd=r.headers.get('Content-Disposition')||'';
+    let dlName = 'pagos_impuestos.xlsx';
+    const match = cd.match(/filename="?([^"]+)"?/);
+    if(match) dlName = match[1];
+    a.download=dlName;
+    a.click();
+    toast('✅ Archivo descargado','success');
+  }catch{ toast('Error al exportar','error'); }
+  finally{ btn.innerHTML='⬇️ Exportar Excel'; btn.disabled=false; }
+}
+
+// ── Toast ──
+function toast(msg,type='info'){
+  const el=document.createElement('div');
+  el.className=`toast-msg ${type}`;
+  el.textContent=msg;
+  document.getElementById('toast').appendChild(el);
+  setTimeout(()=>el.remove(),4000);
+}
+</script>
+</body>
+</html>
