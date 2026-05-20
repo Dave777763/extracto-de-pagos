@@ -150,7 +150,7 @@ const IMP_ANT = [
   "ISR POR PAGOS POR CUENTA DE TERCEROS O RETENCIONES POR ARRENDAMIENTO DE INMUEBLES",
   "ISR RETENCIONES POR INTERESES"
 ];
-const ALL_IMP = [...IMP_NUEVO, ...IMP_ANT];
+let ALL_IMP = []; // Se calculará dinámicamente
 const SUB_KEYS = ["a_cargo","parte_actualizada","recargos","fecha_pago_anterior","monto_pago_anterior","cantidad_a_cargo","cantidad_a_favor","compensaciones","cantidad_a_pagar"];
 const SUB_LABELS = ["A cargo","Parte act.","Recargos","F. pago ant.","Monto ant.","Cant. cargo","Cant. favor","Compensaciones","Cant. pagar"];
 const SUB_NUM = new Set([0,1,2,4,5,6,7,8]);
@@ -166,6 +166,39 @@ let SID = null, RECS = [], FILTER = 'all', pdfQueue = [];
 // ── Init ──
 fetch('/api/session/new',{method:'POST'}).then(r=>r.json()).then(d=>{SID=d.session_id});
 
+// Calcular impuestos únicos y ordenados a partir de los registros
+function updateAllImpFromRecords(records) {
+  const taxes = new Set();
+  for (const rec of records) {
+    for (const key of Object.keys(rec)) {
+      if (key.includes('|')) {
+        taxes.add(key.split('|')[0]);
+      }
+    }
+  }
+  
+  const list = Array.from(taxes);
+  const knownOrder = [...IMP_NUEVO, ...IMP_ANT];
+  list.sort((a, b) => {
+    const idxA = knownOrder.indexOf(a);
+    const idxB = knownOrder.indexOf(b);
+    if (idxA !== -1 && idxB !== -1) return idxA - idxB;
+    if (idxA !== -1) return -1;
+    if (idxB !== -1) return 1;
+    return a.localeCompare(b);
+  });
+  
+  ALL_IMP = list;
+}
+
+function onRecordsChanged(newRecs) {
+  RECS = newRecs || [];
+  updateAllImpFromRecords(RECS);
+  buildHeaders();
+  renderTable();
+  updateStats();
+}
+
 // ── Build table headers ──
 function buildHeaders(){
   const thead = document.getElementById('thead');
@@ -175,7 +208,7 @@ function buildHeaders(){
   let r1 = `<tr><th rowspan="2">#</th><th rowspan="2">RFC</th>`;
   for(let i=0;i<nHdr;i++) r1 += `<th rowspan="2">${HDR_LABELS[i]}</th>`;
   for(const imp of ALL_IMP){
-    const cls = IMP_NUEVO.includes(imp) ? '#10b981' : '#3b82f6';
+    const cls = IMP_NUEVO.includes(imp) ? '#10b981' : (IMP_ANT.includes(imp) ? '#3b82f6' : '#64748b');
     const short = imp.length > 30 ? imp.substring(0,28)+'…' : imp;
     r1 += `<th colspan="${SUB_KEYS.length}" style="background:${cls};color:#fff;text-align:center;font-size:.68rem" title="${imp}">${short}</th>`;
   }
@@ -184,7 +217,7 @@ function buildHeaders(){
   // Row 2
   let r2 = '<tr>';
   for(const imp of ALL_IMP){
-    const bg = IMP_NUEVO.includes(imp) ? '#1a6b3a' : '#1a3a6b';
+    const bg = IMP_NUEVO.includes(imp) ? '#1a6b3a' : (IMP_ANT.includes(imp) ? '#1a3a6b' : '#475569');
     for(const sl of SUB_LABELS){
       r2 += `<th style="background:${bg};color:#ddd;font-size:.63rem;white-space:nowrap">${sl}</th>`;
     }
@@ -390,8 +423,8 @@ async function uploadPDFs(){
     if(d.error) return toast(d.error,'error');
     d.errors?.forEach(e=>toast(e,'error'));
     if(d.new_count>0) toast(`✅ ${d.new_count} comprobante(s) cargados`,'success');
-    RECS=(await (await fetch(`/api/session/${SID}`)).json()).records;
-    renderTable(); updateStats();
+    const recs = (await (await fetch(`/api/session/${SID}`)).json()).records;
+    onRecordsChanged(recs);
     clearQueue();
   }catch{ toast('Error de conexión','error'); }
   finally{ btn.innerHTML='📤 Procesar PDFs'; btn.disabled=false; }
@@ -409,8 +442,8 @@ async function uploadExcel(){
     const d=await (await fetch('/api/upload-excel',{method:'POST',body:fd})).json();
     if(d.error) return toast(d.error,'error');
     toast(`📊 ${d.loaded_count} fila(s) importadas`,'success');
-    RECS=(await (await fetch(`/api/session/${SID}`)).json()).records;
-    renderTable(); updateStats();
+    const recs = (await (await fetch(`/api/session/${SID}`)).json()).records;
+    onRecordsChanged(recs);
     document.getElementById('xl-input').value='';
     document.getElementById('xl-sel').textContent='';
   }catch{ toast('Error de conexión','error'); }
@@ -420,7 +453,8 @@ async function uploadExcel(){
 // ── Delete ──
 async function delRec(idx){
   const d=await (await fetch('/api/delete-record',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({session_id:SID,index:idx})})).json();
-  RECS=d.records; renderTable(); updateStats(); toast('Eliminado','info');
+  onRecordsChanged(d.records);
+  toast('Eliminado','info');
 }
 
 // ── Clear ──
@@ -428,7 +462,8 @@ async function clearAll(){
   if(!RECS.length) return;
   if(!confirm('¿Eliminar todos los registros?')) return;
   await fetch('/api/clear-session',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({session_id:SID})});
-  RECS=[]; renderTable(); updateStats(); toast('Sesión limpiada','info');
+  onRecordsChanged([]);
+  toast('Sesión limpiada','info');
 }
 
 // ── Export ──

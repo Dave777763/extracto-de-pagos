@@ -166,44 +166,42 @@ def parse_pdf(pdf_bytes: bytes, filename: str, filepath: str = "") -> dict:
     m_venc = re.search(r'Vencimiento Obligaci[oó]n\s*:?\s*\n?\s*([\d/]+)', text, re.IGNORECASE)
     rec["vencimiento_obligacion"] = m_venc.group(1).strip() if m_venc else ""
 
-    # Inicializa todos los impuestos en None
-    for imp in ALL_IMPUESTOS:
-        for sk in SUB_KEYS:
-            rec[f"{imp}|{sk}"] = None
-
     # Patrón para un bloque completo por concepto
     block_pattern = re.compile(
-        r'(Concepto de pago\s+\d+\s*:\s*\n.+?)(?=Concepto de pago\s+\d+\s*:|INFORMACI[OÓ]N REGISTRADA|$)',
+        r'(Concepto de pago\s+\d+\s*:.+?)(?=Concepto de pago\s+\d+\s*:|INFORMACI[OÓ]N REGISTRADA|$)',
         re.DOTALL
     )
     raw_blocks = block_pattern.findall(text)
 
     for block_text in raw_blocks:
-        # Nombre del concepto
-        m_nombre = re.search(r'Concepto de pago\s+\d+\s*:\s*\n(.+?)\n', block_text)
-        if not m_nombre:
-            continue
-        nombre = normalize(m_nombre.group(1))
-        if nombre not in ALL_IMPUESTOS:
+        # Nombre del concepto: puede estar en la misma línea o en la siguiente
+        m_nombre = re.search(r'Concepto de pago\s+\d+\s*:\s*(.+?)(?:\n|$)', block_text)
+        if m_nombre and m_nombre.group(1).strip():
+            nombre = normalize(m_nombre.group(1))
+        else:
+            m_nombre = re.search(r'Concepto de pago\s+\d+\s*:\s*\n\s*(.+?)(?:\n|$)', block_text)
+            nombre = normalize(m_nombre.group(1)) if m_nombre else None
+
+        if not nombre:
             continue
 
         def _get(pattern, txt=block_text):
             m = re.search(pattern, txt, re.IGNORECASE)
             return m.group(1).strip() if m else None
 
-        a_cargo          = parse_amount(_get(r'A cargo:\s*\n([\d,]+)'))
-        a_favor_raw      = _get(r'A favor:\s*\n([\d,]+)')
-        parte_act        = parse_amount(_get(r'Parte actualizada:\s*\n([\d,]+)'))
-        recargos         = parse_amount(_get(r'Recargos:\s*\n([\d,]+)'))
-        fecha_pago_ant   = _get(r'Fecha del pago realizado con anterioridad:\s*\n(.+?)')
-        monto_pago_ant   = parse_amount(_get(r'Monto pagado con anterioridad:\s*\n([\d,]+)'))
-        cant_cargo       = parse_amount(_get(r'Cantidad a cargo:\s*\n([\d,]+)'))
-        cant_favor_raw   = _get(r'Cantidad a favor:\s*\n([\d,]+)')
+        a_cargo          = parse_amount(_get(r'A cargo:\s*\n?\s*([\d,]+)'))
+        a_favor_raw      = _get(r'A favor:\s*\n?\s*([\d,]+)')
+        parte_act        = parse_amount(_get(r'Parte actualizada:\s*\n?\s*([\d,]+)'))
+        recargos         = parse_amount(_get(r'Recargos:\s*\n?\s*([\d,]+)'))
+        fecha_pago_ant   = _get(r'Fecha del pago realizado con anterioridad:\s*\n?\s*(.+?)(?:\n|$)')
+        monto_pago_ant   = parse_amount(_get(r'Monto pagado con anterioridad:\s*\n?\s*([\d,]+)'))
+        cant_cargo       = parse_amount(_get(r'Cantidad a cargo:\s*\n?\s*([\d,]+)'))
+        cant_favor_raw   = _get(r'Cantidad a favor:\s*\n?\s*([\d,]+)')
         cant_favor       = parse_amount(cant_favor_raw) or parse_amount(a_favor_raw)
         # Compensaciones: puede ser (1,079) o 1,079
-        comp_raw         = _get(r'Compensaci[oó]n(?:es)?:\s*\n(\(?[\d,]+\)?)')
+        comp_raw         = _get(r'Compensaci[oó]n(?:es)?:\s*\n?\s*(\(?[\d,]+\)?)')
         compensaciones   = parse_amount(comp_raw)
-        cant_pagar       = parse_amount(_get(r'Cantidad a pagar:\s*\n([\d,]+)'))
+        cant_pagar       = parse_amount(_get(r'Cantidad a pagar:\s*\n?\s*([\d,]+)'))
 
         vals = [a_cargo, parte_act, recargos, fecha_pago_ant, monto_pago_ant,
                 cant_cargo, cant_favor, compensaciones, cant_pagar]
@@ -211,20 +209,17 @@ def parse_pdf(pdf_bytes: bytes, filename: str, filepath: str = "") -> dict:
             rec[f"{nombre}|{sk}"] = v
 
     # Portal detectado
-    portales = set()
-    for imp in PORTAL_NUEVO_IMPUESTOS:
-        if rec.get(f"{imp}|a_cargo") is not None:
-            portales.add("Portal Nuevo")
-    for imp in PORTAL_ANTERIOR_IMPUESTOS:
-        if rec.get(f"{imp}|a_cargo") is not None:
-            portales.add("Portal Anterior")
-    rec["portal"] = " + ".join(portales) if portales else "Desconocido"
+    if re.search(r'Impuesto a cargo', text, re.IGNORECASE):
+        rec["portal"] = "Portal Anterior"
+    else:
+        rec["portal"] = "Portal Nuevo"
 
     return rec
 
 # ── Colores ──────────────────────────────────────────────────────────────────
 C_NUEVO    = "1a6b3a"
 C_ANTERIOR = "1a3a6b"
+C_OTHER    = "455A64"
 C_WHITE    = "FFFFFF"
 C_NUEVO_L  = "C8E6C9"
 C_ANT_L    = "BBDEFB"
@@ -283,9 +278,25 @@ def get_period_sort_key(rec):
         dt = datetime.min
     return (ej, month_num, dt)
 
+def get_sorted_taxes(records):
+    taxes = set()
+    for r in records:
+        for k in r.keys():
+            if '|' in k:
+                taxes.add(k.split('|')[0])
+    
+    # Ordenar: impuestos conocidos primero, luego nuevos alfabéticamente
+    def sort_key(tax):
+        if tax in ALL_IMPUESTOS:
+            return (0, ALL_IMPUESTOS.index(tax))
+        else:
+            return (1, tax.lower())
+            
+    return sorted(list(taxes), key=sort_key)
+
 def render_tax_table(ws, start_row, title, records, imp):
     ws.cell(start_row, 11, value=title)
-    bg_hdr = C_NUEVO if imp in PORTAL_NUEVO_IMPUESTOS else C_ANTERIOR
+    bg_hdr = C_NUEVO if imp in PORTAL_NUEVO_IMPUESTOS else (C_ANTERIOR if imp in PORTAL_ANTERIOR_IMPUESTOS else C_OTHER)
     cell_style(ws.cell(start_row, 11), bg_hdr, True, C_WHITE, "center", size=8)
     ws.merge_cells(start_row=start_row, start_column=11, end_row=start_row, end_column=18)
     
@@ -398,10 +409,10 @@ def get_exercise_year(rec):
 def is_pending_payment(rec):
     # 1) Impuestos que tengan "Cantidad a pagar" sin datos bancarios (fecha_pago)
     if not tiene_banco(rec):
-        for imp in ALL_IMPUESTOS:
-            val = rec.get(f"{imp}|cantidad_a_pagar")
-            if val is not None and isinstance(val, (int, float)) and val > 0:
-                return True
+        for k, val in rec.items():
+            if k.endswith("|cantidad_a_pagar"):
+                if val is not None and isinstance(val, (int, float)) and val > 0:
+                    return True
 
     # 2) Impuestos con fecha de pago el siguiente ejercicio (año de pago > año de ejercicio)
     pay_yr = get_payment_year(rec)
@@ -424,7 +435,8 @@ def write_full_record_sheet(ws, records):
 
     sorted_groups = sorted(groups.items(), key=lambda x: (x[0][1], x[0][0]))
 
-    n_imp = len(ALL_IMPUESTOS)
+    current_taxes = get_sorted_taxes(records)
+    n_imp = len(current_taxes)
     total_cols = len(HDR_COLS) + n_imp * len(SUB_KEYS) + len(TAIL_COLS)
 
     # ── Anchos de columna ──
@@ -482,8 +494,8 @@ def write_full_record_sheet(ws, records):
 
         # Grupos de impuesto (hdr_row1)
         col = len(HDR_COLS) + 1
-        for imp in ALL_IMPUESTOS:
-            bg = C_NUEVO if imp in PORTAL_NUEVO_IMPUESTOS else C_ANTERIOR
+        for imp in current_taxes:
+            bg = C_NUEVO if imp in PORTAL_NUEVO_IMPUESTOS else (C_ANTERIOR if imp in PORTAL_ANTERIOR_IMPUESTOS else C_OTHER)
             ws.cell(hdr_row1, col, value=imp)
             cell_style(ws.cell(hdr_row1, col), bg, True, C_WHITE, "center", wrap=True, size=8)
             end_col = col + len(SUB_KEYS) - 1
@@ -492,8 +504,8 @@ def write_full_record_sheet(ws, records):
 
         # Sub-columnas de impuesto (hdr_row2)
         col = len(HDR_COLS) + 1
-        for imp in ALL_IMPUESTOS:
-            bg_hdr = C_NUEVO if imp in PORTAL_NUEVO_IMPUESTOS else C_ANTERIOR
+        for imp in current_taxes:
+            bg_hdr = C_NUEVO if imp in PORTAL_NUEVO_IMPUESTOS else (C_ANTERIOR if imp in PORTAL_ANTERIOR_IMPUESTOS else C_OTHER)
             for sc in SUB_COLS:
                 ws.cell(hdr_row2, col, value=sc)
                 cell_style(ws.cell(hdr_row2, col), bg_hdr, True, C_WHITE, "center", wrap=True, size=7)
@@ -515,7 +527,7 @@ def write_full_record_sheet(ws, records):
                 cell_style(cell, row_bg, halign="center")
                 col += 1
 
-            for imp in ALL_IMPUESTOS:
+            for imp in current_taxes:
                 for idx, sk in enumerate(SUB_KEYS):
                     v = rec.get(f"{imp}|{sk}")
                     cell = ws.cell(ri, col, value=v)
@@ -545,7 +557,7 @@ def write_full_record_sheet(ws, records):
             cell_style(ws.cell(tr,c), C_TOTAL, True, C_WHITE)
 
         col = len(HDR_COLS) + 1
-        for imp in ALL_IMPUESTOS:
+        for imp in current_taxes:
             for idx, sk in enumerate(SUB_KEYS):
                 cell = ws.cell(tr, col)
                 if idx in SUB_NUMERIC:
@@ -593,7 +605,8 @@ def generate_excel(records):
     write_full_record_sheet(ws_x_pagar, x_pagar_records)
 
     # ── 3. HOJAS ADICIONALES POR IMPUESTO ──
-    for imp in ALL_IMPUESTOS:
+    current_taxes = get_sorted_taxes(records)
+    for imp in current_taxes:
         imp_records = [r for r in records if tiene_impuesto(r, imp)]
         
         sheet_title = imp[:30]
@@ -690,21 +703,45 @@ def read_excel(file_bytes):
 
     current_imp = None
     for ci, (h2, h3) in enumerate(zip(row2, row3)):
-        if h2 and h2 in ALL_IMPUESTOS:
-            current_imp = h2
-        # Si h3 es None pero h2 tiene valor (celda combinada verticalmente), usar h2
+        if h2:
+            h2_str = str(h2).strip()
+            if h2_str in HDR_COLS or h2_str in TAIL_COLS or h2_str.startswith("RFC") or h2_str.startswith("RAZÓN SOCIAL") or h2_str.startswith("EJERCICIO"):
+                current_imp = None
+            else:
+                current_imp = h2_str
+        
         effective_h = h3 if h3 is not None else h2
-        if effective_h in HDR_COLS:
-            hdr_col_map[ci] = HDR_KEYS[HDR_COLS.index(effective_h)]
-        elif effective_h in SUB_COLS and current_imp:
-            imp_col_map[ci] = (current_imp, SUB_KEYS[SUB_COLS.index(effective_h)])
-        elif effective_h in TAIL_COLS:
-            tail_col_map[ci] = TAIL_KEYS[TAIL_COLS.index(effective_h)]
+        if effective_h:
+            eff_str = str(effective_h).strip()
+            if eff_str in HDR_COLS:
+                hdr_col_map[ci] = HDR_KEYS[HDR_COLS.index(eff_str)]
+            elif eff_str in SUB_COLS and current_imp:
+                imp_col_map[ci] = (current_imp, SUB_KEYS[SUB_COLS.index(eff_str)])
+            elif eff_str in TAIL_COLS:
+                tail_col_map[ci] = TAIL_KEYS[TAIL_COLS.index(eff_str)]
 
-    for row in ws.iter_rows(min_row=4, values_only=True):
+    current_rfc = ""
+    current_razon_social = ""
+    current_ejercicio = ""
+
+    for row in ws.iter_rows(min_row=1, values_only=True):
         if all(v is None for v in row): continue
         if isinstance(row[0], str) and "TOTAL" in str(row[0]).upper(): continue
-        rec = {}
+        
+        row0_str = str(row[0]).strip() if row[0] is not None else ""
+        if row0_str == "RFC:":
+            current_rfc = str(row[1]) if row[1] is not None else ""
+            current_razon_social = str(row[3]) if row[3] is not None else ""
+            current_ejercicio = str(row[5]) if row[5] is not None else ""
+            continue
+        if row0_str == "Nombre del archivo" or row0_str.startswith("RELACIÓN DE PAGOS") or row0_str == "":
+            continue
+            
+        rec = {
+            "rfc": current_rfc,
+            "razon_social": current_razon_social,
+            "ejercicio": current_ejercicio
+        }
         for ci, v in enumerate(row):
             if ci in hdr_col_map:
                 rec[hdr_col_map[ci]] = str(v) if v is not None else ""
@@ -714,10 +751,6 @@ def read_excel(file_bytes):
             elif ci in tail_col_map:
                 tk = tail_col_map[ci]
                 rec[tk] = float(v) if isinstance(v,(int,float)) and tk in ("importe_total",) else (str(v) if v else "")
-        # garantiza que todos los campos de impuesto existan
-        for imp in ALL_IMPUESTOS:
-            for sk in SUB_KEYS:
-                rec.setdefault(f"{imp}|{sk}", None)
         records.append(rec)
 
     return records
